@@ -1,69 +1,10 @@
 import json
 import os
 import re
+from config import Config
 
 
-# https://prometheus.io/docs/prometheus/latest/querying/functions/
-FUNCTIONS_BLACKLIST = [
-    'abs',
-    'absent',
-    'ceil',
-    'changes',
-    'clamp_max',
-    'clamp_min',
-    'day_of_month',
-    'day_of_week',
-    'days_in_month',
-    'delta',
-    'deriv',
-    'exp',
-    'floor',
-    'histogram_quantile',
-    'holt_winters',
-    'hour',
-    'idelta',
-    'increase',
-    'irate',
-    'label_join',
-    'label_replace',
-    'ln',
-    'log2',
-    'log10',
-    'minute',
-    'month',
-    'predict_linear',
-    'rate',
-    'resets',
-    'round',
-    'scalar',
-    'sort',
-    'sort_desc',
-    'sqrt',
-    'time',
-    'timestamp',
-    'vector',
-    'year',
-    'average_over_time',
-    'sum_over_time',
-    'count_over_time',
-    'min_over_time',
-    'max_over_time',
-    'quantile_over_time',
-    'stddev_over_time',
-    'stdvar_over_time',
-    # Aggregation operators look like functions
-    'sum',
-    'min',
-    'max',
-    'avg',
-    'stddev',
-    'stdvar',
-    'count',
-    'count_values',
-    'bottomk',
-    'topk',
-    'quantile',
-]
+CONFIG = Config('config.yaml')
 PATTERN = re.compile('([a-zA-Z0-9]+(_[a-zA-Z0-9]+)+)')
 
 
@@ -106,5 +47,5 @@ if __name__ == '__main__':
             if has_prometheus(panel):
                 for target in panel['targets']:
                     for metric in regex_extract_metrics(target['expr']):
-                        if metric not in FUNCTIONS_BLACKLIST:
+                        if metric not in CONFIG.blacklist:
                             print(metric)
