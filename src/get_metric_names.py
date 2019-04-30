@@ -2,6 +2,7 @@ import json
 import os
 import re
 
+
 # https://prometheus.io/docs/prometheus/latest/querying/functions/
 FUNCTIONS_BLACKLIST = [
     'abs',
@@ -50,6 +51,18 @@ FUNCTIONS_BLACKLIST = [
     'quantile_over_time',
     'stddev_over_time',
     'stdvar_over_time',
+    # Aggregation operators look like functions
+    'sum',
+    'min',
+    'max',
+    'avg',
+    'stddev',
+    'stdvar',
+    'count',
+    'count_values',
+    'bottomk',
+    'topk',
+    'quantile',
 ]
 PATTERN = re.compile('([a-zA-Z0-9]+(_[a-zA-Z0-9]+)+)')
 
@@ -75,8 +88,8 @@ def has_prometheus(panel):
         return 'prometheus' in panel['datasource']
 
 
-def regex_extract_metrics(target):
-    matches = PATTERN.findall(target['expr'])
+def regex_extract_metrics(expr):
+    matches = PATTERN.findall(expr)
     if matches:
         # parentheses denote a match group and findall will yield a list of tuples containing match groups.
         # the first match group contains what we want
@@ -92,6 +105,6 @@ if __name__ == '__main__':
         for panel in get_panels(get_dashboard(filename)):
             if has_prometheus(panel):
                 for target in panel['targets']:
-                    for metric in regex_extract_metrics(target):
+                    for metric in regex_extract_metrics(target['expr']):
                         if metric not in FUNCTIONS_BLACKLIST:
                             print(metric)

@@ -2,16 +2,20 @@ import requests
 from time import sleep
 import json
 import os
+from config import Config
+
+CONFIG = Config('config.yaml')
 
 
 def get_dashboards():
-    url = 'https://grafana.wikimedia.org/api/search?query=&starred=false'
+    url = '{}/api/search?query=&starred=false'.format(CONFIG.grafana_host)
     return requests.get(url).json()
 
 
 def get_dashboard(uid):
-    url = 'https://grafana.wikimedia.org/api/dashboards/uid/{}'.format(uid)
-    return requests.get(url).json()
+    if uid not in CONFIG.excluded_dashboards:
+        url = '{}/api/dashboards/uid/{}'.format(CONFIG.grafana_host, uid)
+        return requests.get(url).json()
 
 
 if __name__ == '__main__':
