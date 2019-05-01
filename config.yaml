@@ -94,16 +94,16 @@
 
     node_textfile_mtime: node_textfile_mtime_seconds
 
-  scalings:  # TODO
+  scalings:
     - old: node_disk_io_time_ms
       new: node_disk_io_time_seconds_total
-      factor: 1000
+      factor: ' * 1000'
     - old: node_disk_read_time_ms
       new: node_disk_read_time_seconds_total
-      factor: 1000
+      factor: ' * 1000'
     - old: node_disk_write_time_ms
       new: node_disk_write_time_seconds_total
-      factor: 1000
+      factor: ' * 1000'
 
   query_parameters: # TODO
     - old: node_cpu

@@ -1,6 +1,6 @@
 import unittest
 
-from update_metric_names import rewrite_expr, make_backwards_compatible
+from update_metric_names import rewrite_expr, make_backwards_compatible, update_scaling, cleanup_duplicate
 
 
 class Update_Metric_Names(unittest.TestCase):
@@ -49,4 +49,61 @@ class Update_Metric_Names(unittest.TestCase):
                 '100.0 - 100 * (node_filesystem_avail{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'} / node_filesystem_size{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'})'
             ),
             '(100.0 - 100 * (node_filesystem_avail_bytes{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'} / node_filesystem_size_bytes{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'})) or (100.0 - 100 * (node_filesystem_avail{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'} / node_filesystem_size{instance=~\'$instance:.*\',device !~\'tmpfs\',device!~\'by-uuid\'}))'
+        )
+
+    def test_cleanup_duplicate(self):
+        self.assertEqual(
+            cleanup_duplicate(
+                'irate(node_disk_io_time_seconds_total{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m])irate(node_disk_io_time_seconds_total{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m])'
+            ),
+            'irate(node_disk_io_time_seconds_total{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m])'
+        )
+
+    def test_update_scaling_basic(self):
+        self.assertEqual(
+            'node_disk_io_time_seconds_total{instance=~"$server.*"} * 1000',
+            update_scaling(
+                'node_disk_io_time_ms',
+                'node_disk_io_time_ms{instance=~"$server.*"}'
+            )
+        )
+
+    def test_update_scaling_wrapped(self):
+        self.assertEqual(
+            'irate(node_disk_io_time_seconds_total{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m]) * 1000',
+            update_scaling(
+                'node_disk_io_time_ms',
+                'irate(node_disk_io_time_ms{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m])'
+            )
+        )
+
+    def test_update_scaling_scaled(self):
+        self.assertEqual(
+            'irate(node_disk_io_time_seconds_total{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m])',
+            update_scaling(
+                'node_disk_io_time_ms',
+                'irate(node_disk_io_time_ms{instance=~"$server:.*",device=~"[vs]d[a-z]+"}[5m]) / 1000'
+            )
+        )
+        self.assertEqual(
+            'irate(node_disk_io_time_seconds_total{instance=~"$node"}[5m])*100',
+            update_scaling(
+                'node_disk_io_time_ms',
+                'irate(node_disk_io_time_ms{instance=~"$node"}[5m])/10')
+        )
+
+    def test_update_scaling_complex(self):
+        self.assertEqual(
+            '100 * (irate(node_disk_io_time_seconds_total{instance=~"graphite.*",device=~"[vs]d[a-z]+"}[5m])) > 0',
+            update_scaling(
+                'node_disk_io_time_ms',
+                '100 * (irate(node_disk_io_time_ms{instance=~"graphite.*",device=~"[vs]d[a-z]+"}[5m]) / 1000) > 0'
+            )
+        )
+        self.assertEqual(
+            'max(irate(node_disk_read_time_seconds_total{instance="$server:9100", device=~"sda.*"}[5m]) * 1000)',
+            update_scaling(
+                'node_disk_read_time_ms',
+                'max(irate(node_disk_read_time_ms{instance="$server:9100", device=~"sda.*"}[5m]))'
+            )
         )

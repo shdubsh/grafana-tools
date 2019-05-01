@@ -46,8 +46,12 @@ def rewrite_expr(expr):
     :param expr: str
     :return: str
     """
+    expr = cleanup_duplicate(expr)
+    metric_names = regex_extract_metrics(expr)
+    for metric_name in [x['old'] for x in CONFIG.scalings]:
+        if metric_name in metric_names:
+            update_scaling(metric_name, expr)
     for key in CONFIG.mappings.keys():
-        metric_names = regex_extract_metrics(expr)
         if key in metric_names and CONFIG.mappings[key] not in metric_names:
             expr = expr.replace(key, CONFIG.mappings[key])
     return expr
@@ -75,6 +79,44 @@ def make_backwards_compatible(expr, original):
         return '({}) or ({})'.format(expr, original)
 
 
+def cleanup_duplicate(expr):
+    for idx in range(0, len(expr)):
+        if expr[0:idx] == expr[idx:]:
+            expr = expr[0:idx]
+    return expr
+
+
+def update_scaling(metric_name, expr):
+    new_metric_name, factor = [(x['new'], x['factor']) for x in CONFIG.scalings if x['old'] == metric_name][0]
+    # HACK
+    # By observing what is in dashboards right now, there are no other instances of scaling.
+    # This hack will simply clobber them.
+    try:
+        expr.index(' / 1000')
+        expr = expr.replace(' / 1000', '')
+        return expr.replace(metric_name, new_metric_name)
+    except ValueError:
+        pass
+    try:
+        expr.index('/10')
+        expr = expr.replace('/10', '*100')
+        return expr.replace(metric_name, new_metric_name)
+    except ValueError:
+        pass
+    # /HACK
+    occurrences = expr.count(metric_name)
+    beginning = 0
+    for _ in range(0, occurrences):
+        beginning = expr.index(metric_name, beginning)
+        end = expr.index('}', beginning) + 1
+        try:
+            placement = expr.index(')', end) + 1
+            expr = expr[:placement].replace(metric_name, new_metric_name) + '{}'.format(factor) + expr[placement:]
+        except ValueError:
+            expr = expr.replace(metric_name, new_metric_name) + '{}'.format(factor)
+    return expr
+
+
 def write_dashboard(filename, dashboard):
     with open('{}/{}'.format(WRITE_DIR, filename), 'w') as f:
         f.write(json.dumps(dashboard))
@@ -94,5 +136,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
