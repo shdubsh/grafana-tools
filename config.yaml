@@ -107,11 +107,16 @@
 
   query_parameters: # TODO
     - old: node_cpu
-      new: label_replace(node_cpu_seconds_total, "cpu", "cpu$1", "cpu", "(.+)")
-    - old: node_cpu
-      new: label_replace(label_replace(label_replace(node_cpu_guest_seconds_total, "mode", "guest", "mode", "user"), "mode", "guest_nice", "mode", "nice"), "cpu", "cpu$1", "cpu", "(.+)")
+      # For param mode:guest, new metric name is "node_cpu_guest_seconds_total" and mode is user
+      # For param mode:guest_nice, new metric name is "node_cpu_guest_seconds_total" and mode is nice
+      # For param cpu, "cpu" is replaced out of the value leaving the index, e.g. 'cpu0'.replace('cpu', '')
+      new:
+        - node_cpu_guest_seconds_total
+        - node_cpu_seconds_total
     - old: node_nfs_procedures
-      new: label_replace(label_replace(node_nfs_requests_total, "procedure", "$1", "method", "(.+)"), "version", "$1", "proto", "(.+)")
+      # Param procedure is renamed to method
+      # Param version is renamed to proto
+      new: node_nfs_requests_total
 
 # https://prometheus.io/docs/prometheus/latest/querying/functions/
   functions:

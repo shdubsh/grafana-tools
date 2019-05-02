@@ -1,5 +1,6 @@
 import json
 import os
+from string import ascii_letters, digits
 from get_metric_names import regex_extract_metrics, get_dashboards, get_dashboard
 from config import Config
 
@@ -50,7 +51,10 @@ def rewrite_expr(expr):
     metric_names = regex_extract_metrics(expr)
     for metric_name in [x['old'] for x in CONFIG.scalings]:
         if metric_name in metric_names:
-            update_scaling(metric_name, expr)
+            expr = update_scaling(metric_name, expr)
+    for metric_name in [x['old'] for x in CONFIG.query_parameters]:
+        if metric_name in metric_names:
+            expr = update_query_parameters(metric_name, expr)
     for key in CONFIG.mappings.keys():
         if key in metric_names and CONFIG.mappings[key] not in metric_names:
             expr = expr.replace(key, CONFIG.mappings[key])
@@ -88,6 +92,9 @@ def cleanup_duplicate(expr):
 
 def update_scaling(metric_name, expr):
     new_metric_name, factor = [(x['new'], x['factor']) for x in CONFIG.scalings if x['old'] == metric_name][0]
+    # Bypass if already backwards-compatibile
+    if new_metric_name in expr:
+        return expr
     # HACK
     # By observing what is in dashboards right now, there are no other instances of scaling.
     # This hack will simply clobber them.
@@ -117,6 +124,87 @@ def update_scaling(metric_name, expr):
     return expr
 
 
+def extract_params(source):
+    output = {}
+    for param in source.split(','):
+        operator = ''
+        key_end_position = 0
+        value_start_position = 0
+        for idx, char in enumerate(param):
+            if operator:
+                if char in ['\'', '"']:
+                    value_start_position = idx
+                    break
+                else:
+                    operator += char
+                    continue
+            if char not in ascii_letters + digits:
+                key_end_position = idx
+                operator += char
+        output[param[0:key_end_position]] = {
+            'operator': operator,
+            'value': param[value_start_position:].replace('\'', '').replace('"', '')
+        }
+    return output
+
+
+def update_query_parameters(metric_name, expr):
+    # Bypass if already backwards-compatibile
+    for old, new in [(x['old'], x['new']) for x in CONFIG.query_parameters]:
+        if metric_name == old:
+            if type(new) == list:
+                for new_metric_name in new:
+                    if new_metric_name in expr:
+                        return expr
+            else:
+                if new in expr:
+                    return expr
+    occurrences = expr.count(metric_name)
+    beginning = 0
+    for _ in range(0, occurrences):
+        beginning = expr.index(metric_name, beginning)
+        labels_begin = expr.index('{', beginning) + 1
+        end = expr.index('}', beginning)
+        params = extract_params(expr[labels_begin:end])
+        # HACK
+        # I don't want to write a data-driven expression language at this time.  Thanks for asking.
+        new_metric_name = metric_name
+        if metric_name == 'node_cpu':
+            new_metric_name = 'node_cpu_seconds_total'
+            if params.get('cpu'):
+                params['cpu']['value'] = params['cpu']['value'].replace('cpu', '')
+            if params.get('mode'):
+                if params['mode']['value'] == 'guest':
+                    params['mode']['value'] = 'user'
+                    new_metric_name = 'node_cpu_guest_seconds_total'
+                if params['mode']['value'] == 'guest_nice':
+                    params['mode']['value'] = 'nice'
+                    new_metric_name = 'node_cpu_guest_seconds_total'
+        if metric_name == 'node_nfs_procedures':
+            new_metric_name = 'node_nfs_requests_total'
+            if params.get('procedure'):
+                if not params.get('method'):
+                    params['method'] = {}
+                params['method']['operator'] = params['procedure']['operator']
+                params['method']['value'] = params['procedure']['value']
+                del(params['procedure'])
+            if params.get('version'):
+                if not params.get('proto'):
+                    params['proto'] = {}
+                params['proto']['operator'] = params['version']['operator']
+                params['proto']['value'] = params['version']['value']
+                del(params['version'])
+
+        expr = expr[0:beginning] \
+            + expr[beginning:labels_begin-1].replace(metric_name, new_metric_name) \
+            + '{' \
+            + ','.join(['{}{}"{}"'.format(key, value['operator'], value['value']) for key, value in params.items()]) \
+            + '}' \
+            + expr[end+1:]
+        # /HACK
+    return expr
+
+
 def write_dashboard(filename, dashboard):
     with open('{}/{}'.format(WRITE_DIR, filename), 'w') as f:
         f.write(json.dumps(dashboard))
@@ -136,3 +224,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

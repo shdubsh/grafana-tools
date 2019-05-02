@@ -1,6 +1,6 @@
 import unittest
 
-from update_metric_names import rewrite_expr, make_backwards_compatible, update_scaling, cleanup_duplicate
+from update_metric_names import rewrite_expr, make_backwards_compatible, update_scaling, cleanup_duplicate, update_query_parameters
 
 
 class Update_Metric_Names(unittest.TestCase):
@@ -105,5 +105,50 @@ class Update_Metric_Names(unittest.TestCase):
             update_scaling(
                 'node_disk_read_time_ms',
                 'max(irate(node_disk_read_time_ms{instance="$server:9100", device=~"sda.*"}[5m]))'
+            )
+        )
+
+    def test_update_query_parameters_simple(self):
+        self.assertEqual(
+            'sum by (mode)(irate(node_cpu_seconds_total{cpu="0",mode="steal",instance=~"$node:$port",job=~"$job"}[5m])) * 100',
+            update_query_parameters(
+                'node_cpu',
+                'sum by (mode)(irate(node_cpu{cpu="cpu0",mode=\'steal\',instance=~"$node:$port",job=~"$job"}[5m])) * 100'
+            )
+        )
+
+    def test_update_query_parameters_guest(self):
+        self.assertEqual(
+            'sum by (mode)(irate(node_cpu_guest_seconds_total{cpu="0",mode="user",instance=~"$node:$port",job=~"$job"}[5m])) * 100',
+            update_query_parameters(
+                'node_cpu',
+                'sum by (mode)(irate(node_cpu{cpu="cpu0",mode=\'guest\',instance=~"$node:$port",job=~"$job"}[5m])) * 100'
+            )
+        )
+
+    def test_update_query_parameters_guest_nice(self):
+        self.assertEqual(
+            'sum by (mode)(irate(node_cpu_guest_seconds_total{cpu="0",mode="nice",instance=~"$node:$port",job=~"$job"}[5m])) * 100',
+            update_query_parameters(
+                'node_cpu',
+                'sum by (mode)(irate(node_cpu{cpu="cpu0",mode=\'guest_nice\',instance=~"$node:$port",job=~"$job"}[5m])) * 100'
+            )
+        )
+
+    def test_update_query_parameters_nfs(self):
+        self.assertEqual(
+            'node_nfs_requests_total{method="Access",proto="3"}',
+            update_query_parameters(
+                'node_nfs_procedures',
+                'node_nfs_procedures{procedure="Access",version="3"}'
+            )
+        )
+
+    def test_update_query_parameters_already_backwards_compatible(self):
+        self.assertEqual(
+            '(sum by (mode)(irate(node_cpu_guest_seconds_total{cpu="0",mode="nice",instance=~"$node:$port",job=~"$job"}[5m])) * 100) or sum by (mode)(irate(node_cpu{cpu="cpu0",mode=\'guest_nice\',instance=~"$node:$port",job=~"$job"}[5m])) * 100',
+            update_query_parameters(
+                'node_cpu',
+                '(sum by (mode)(irate(node_cpu_guest_seconds_total{cpu="0",mode="nice",instance=~"$node:$port",job=~"$job"}[5m])) * 100) or sum by (mode)(irate(node_cpu{cpu="cpu0",mode=\'guest_nice\',instance=~"$node:$port",job=~"$job"}[5m])) * 100'
             )
         )
